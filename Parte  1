@@ -1,0 +1,74 @@
+//******************************************/
+// Universidad del Valle de Guatemala
+// BE3029 - Electronica Digital 2
+// Nicole Rodriguez
+// 12/08/2025
+// Proyecto 1 - Sensor de temperatura
+// MCU: ESP32 dev kit 1.0
+//******************************************/
+
+//******************************************/
+// Librerias
+//******************************************/
+#include <Arduino.h>
+#include <stdint.h>
+#include <driver/ledc.h>
+#include <Arduino.h>
+//******************************************/
+// Definiciones
+//******************************************/
+// Pines
+#define ledR 13 
+#define ledY 12
+#define ledG 27
+#define sensorTemp 25
+#define but1 5
+
+//******************************************/
+// Variables globales
+//******************************************/
+volatile bool flagLectura = false;
+volatile unsigned long ultimaInterrupcion = 0;
+const unsigned long tiempoRebote = 250; // ms
+
+// ISR de botón
+void IRAM_ATTR ISR_tomaTemp() {
+  unsigned long tiempoActual = millis();
+  if (tiempoActual - ultimaInterrupcion > tiempoRebote) {
+    flagLectura = true;
+    ultimaInterrupcion = tiempoActual;
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(ledR, OUTPUT);
+  pinMode(ledY, OUTPUT);
+  pinMode(ledG, OUTPUT);
+  pinMode(sensorTemp, INPUT);
+  pinMode(but1, INPUT_PULLUP);
+
+  attachInterrupt(digitalPinToInterrupt(but1), ISR_tomaTemp, FALLING);
+}
+
+void loop() {
+  if (flagLectura) {
+    flagLectura = false;
+
+    int adcValue = analogRead(sensorTemp); // 0 - 4095
+    float voltage = adcValue * (3.3 / 4095.0); // Convierte a voltios
+    float tempC = voltage / 0.01; // Convierte a °C (10 mV por °C)
+
+    // Escalar al rango 0–25
+    float tempEscalada = map(tempC, 0, 100, 0, 25); 
+
+    Serial.print("ADC: ");
+    Serial.println(adcValue);
+    Serial.print("Voltaje: ");
+    Serial.println(voltage, 3);
+    Serial.print("Temperatura (°C): ");
+    Serial.println(tempC, 2);
+    Serial.print("Temperatura Escalada (0-25): ");
+    Serial.println(tempEscalada, 2);
+  }
+}
