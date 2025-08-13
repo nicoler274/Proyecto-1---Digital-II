@@ -13,62 +13,95 @@
 #include <Arduino.h>
 #include <stdint.h>
 #include <driver/ledc.h>
-#include <Arduino.h>
 //******************************************/
 // Definiciones
 //******************************************/
-// Pines
 #define ledR 13 
 #define ledY 12
 #define ledG 27
-#define sensorTemp 25
+#define sensorTemp 25 //Sensor de temperatura
 #define but1 5
+
+//Paso #2 definir el canal
+// Canales PWM
+#define pwmChannel1 0
+#define pwmChannel2 1
+#define pwmChannel3 2
+
+//Paso #3 escoger la frecuencia
+#define freqPWM 5000
+//Paso #4 escoger resolucion de pwm
+#define resPWM 8
+
+
+//******************************************/
+// Prototipos de funciones
+//******************************************/
+void initPWM();
 
 //******************************************/
 // Variables globales
 //******************************************/
-volatile bool flagLectura = false;
-volatile unsigned long ultimaInterrupcion = 0;
+// Botones
+volatile bool lecturaTemp = false;
+
+//Variables para ADC
+int adcTemp;
+int adcTempCovert;
+
+// Manejo de intensidad del brillo del led
+/*
+uint8_t colorActual = 0; 
+uint8_t nivelBrillo[3] = {0, 0, 0};
+const uint8_t brillo[] = {0, 85, 170, 255};
+const uint8_t numBrillos = sizeof(brillo) / sizeof(brillo[0]); */
+
+// Anti-rebote
+volatile unsigned long ultimaInterrupcionSelec = 0;
+volatile unsigned long ultimaInterrupcionBri = 0;
 const unsigned long tiempoRebote = 250; // ms
 
-// ISR de botón
+//******************************************/
+// ISRs Rutinas de Interrupcion
+//******************************************/
 void IRAM_ATTR ISR_tomaTemp() {
   unsigned long tiempoActual = millis();
-  if (tiempoActual - ultimaInterrupcion > tiempoRebote) {
-    flagLectura = true;
-    ultimaInterrupcion = tiempoActual;
+  if (tiempoActual - ultimaInterrupcionSelec > tiempoRebote) {
+    lecturaTemp = true;
+    ultimaInterrupcionSelec = tiempoActual;
   }
 }
 
+//******************************************/
+// Configuracion
+//******************************************/
 void setup() {
   Serial.begin(115200);
+  // LEDs pinout
   pinMode(ledR, OUTPUT);
   pinMode(ledY, OUTPUT);
   pinMode(ledG, OUTPUT);
   pinMode(sensorTemp, INPUT);
   pinMode(but1, INPUT_PULLUP);
+/* initPWM();*/
 
+  // Interrupciones en flanco de bajada (botón presionado)
   attachInterrupt(digitalPinToInterrupt(but1), ISR_tomaTemp, FALLING);
 }
-
+//******************************************/
+// Loop Principal
+//******************************************/
 void loop() {
-  if (flagLectura) {
-    flagLectura = false;
-
-    int adcValue = analogRead(sensorTemp); // 0 - 4095
-    float voltage = adcValue * (3.3 / 4095.0); // Convierte a voltios
-    float tempC = voltage / 0.01; // Convierte a °C (10 mV por °C)
-
-    // Escalar al rango 0–25
-    float tempEscalada = map(tempC, 0, 100, 0, 25); 
-
-    Serial.print("ADC: ");
-    Serial.println(adcValue);
-    Serial.print("Voltaje: ");
-    Serial.println(voltage, 3);
-    Serial.print("Temperatura (°C): ");
-    Serial.println(tempC, 2);
-    Serial.print("Temperatura Escalada (0-25): ");
-    Serial.println(tempEscalada, 2);
+  // lectura de temperatura
+  int32_t lecturaTemp = digitalRead(but1);
+  if (lecturaTemp == LOW){
+    adcTemp = analogRead(sensorTemp);
+    Serial.print("tempeatura tomada: ");
+    Serial.println(adcTemp);
+    /*adcTempCovert = map(adcTemp, 0, 1023, -55, 150 );*/
+    adcTempCovert = ((adcTemp * 5)/1023)*100;
+    Serial.print("tempeatura convertida: ");
+    Serial.println(adcTempCovert);
+    delay(100);
   }
 }
