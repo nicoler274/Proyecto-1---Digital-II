@@ -1,0 +1,135 @@
+//******************************************/
+// Universidad del Valle de Guatemala
+// BE3029 - Electronica Digital 2
+// Nicole Rodriguez
+// 12/08/2025
+// Proyecto 1 - Sensor de temperatura
+// MCU: ESP32 dev kit 1.0
+//******************************************/
+
+//******************************************/
+// Librerias
+//******************************************/
+#include <Arduino.h>
+#include <stdint.h>
+#include <driver/ledc.h>
+
+//******************************************/
+// Definiciones
+//******************************************/
+#define ledR 13 
+#define ledY 12
+#define ledG 27
+#define sensorTemp 25 // Sensor de temperatura
+#define but1 5
+
+// Anti-rebote
+volatile bool flagLectura = false;
+volatile unsigned long ultimaInterrupcion = 0;
+const unsigned long tiempoRebote = 250; // ms
+
+// Variables para ADC
+int adcTemp;
+float tempC;
+
+// Canales PWM (uno por LED)
+#define pwmChannelR 0
+#define pwmChannelY 1
+#define pwmChannelG 2
+
+// Frecuencia y resolución de PWM
+#define freqPWM 5000
+#define resPWM 8 
+
+//******************************************/
+// ISRs Rutinas de Interrupcion
+//******************************************/
+void IRAM_ATTR ISR_tomaTemp() {
+  unsigned long tiempoActual = millis();
+  if (tiempoActual - ultimaInterrupcion > tiempoRebote) {
+    flagLectura = true;    
+    ultimaInterrupcion = tiempoActual;
+  }
+}
+
+//******************************************/
+// Configuracion
+//******************************************/
+void setup() {
+  // Entradas
+  pinMode(sensorTemp, INPUT);
+  pinMode(but1, INPUT_PULLUP);
+
+  // Configurar LEDs como salidas PWM
+  ledcSetup(pwmChannelR, freqPWM, resPWM);
+  ledcSetup(pwmChannelY, freqPWM, resPWM);
+  ledcSetup(pwmChannelG, freqPWM, resPWM);
+
+  ledcAttachPin(ledR, pwmChannelR);
+  ledcAttachPin(ledY, pwmChannelY);
+  ledcAttachPin(ledG, pwmChannelG);
+
+  //Rutina de interrupcion
+  attachInterrupt(digitalPinToInterrupt(but1), ISR_tomaTemp, FALLING);
+}
+
+//******************************************/
+// Loop Principal
+//******************************************/
+void loop() {
+// Lectura de temperatura
+if (flagLectura) {
+    flagLectura = false;
+
+    int adcValue = analogRead(sensorTemp);   
+    float voltage = adcValue * (3.3 / 4095);  
+    float tempC = voltage / 0.01;         
+
+    Serial.print("ADC: ");
+    Serial.println(adcValue);
+    Serial.print("Temperatura (°C): ");
+    Serial.println(tempC, 2);
+  
+  // Apagado de leds
+  apagarLEDs();
+
+    // Selección de color según el rango
+  if (tempC < 22.0) {
+      ledcWrite(pwmChannelG, 255); // Verde
+    } 
+    else if (tempC >= 22.0 && tempC < 25.0) {
+      ledcWrite(pwmChannelY, 255); // Amarillo
+    } 
+    else {
+      ledcWrite(pwmChannelR, 255); // Rojo
+    }
+  }
+}
+//******************************************/
+// Otras funciones
+//******************************************/
+void apagarLEDs() {
+  ledcWrite(pwmChannelR, 0);
+  ledcWrite(pwmChannelG, 0);
+  ledcWrite(pwmChannelY, 0);
+}
+/*void initPWM() {
+  ledcSetup(pwmChannel1, freqPWM, resPWM);
+  ledcAttachPin(led1, pwmChannel1);
+  ledcWrite(pwmChannel1, 0);
+
+  ledcSetup(pwmChannel2, freqPWM, resPWM);
+  ledcAttachPin(led2, pwmChannel2);
+  ledcWrite(pwmChannel2, 0);
+
+  ledcSetup(pwmChannel3, freqPWM, resPWM);
+  ledcAttachPin(led3, pwmChannel3);
+  ledcWrite(pwmChannel3, 0);
+}*/
+
+  //Resolucion
+  //16 bits -> 2^16 -> 0.   -65535
+  //.                  0% 
+  //Paso #4 configurar el pwm
+  //Paso #5 configurar GPIO de salida de pwm
+  //Paso #6 configurar ciclo de trabajo
