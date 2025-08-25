@@ -13,16 +13,38 @@
 #include <Arduino.h>
 #include <stdint.h>
 #include <driver/ledc.h>
+#include "config.h"
 
 //******************************************/
 // Definiciones
 //******************************************/
-#define ledR 13 
-#define ledY 12
-#define ledG 27
-#define sensorTemp 25 // Sensor de temperatura
-#define but1 5
+#define ledR 21
+#define ledY 22
+#define ledG 23
+#define but1 4
+#define sensorTemp 13 // Sensor de temperatura
+#define servoPin 19  //Servo
+#define disp1 27 //Display 1
+#define disp2 26 //Display 2
+#define disp3 25 //Display 3
 
+// Canales PWM (led)
+#define pwmChannelR 0
+#define pwmChannelY 1
+#define pwmChannelG 2
+
+// Frecuencia y resolución de PWM (led)
+#define freqPWM_LED 5000
+#define resPWM_LED 8 
+
+// PWM Servo - frecuencia y resolucion
+#define pwmChannelServo 3
+#define freqPWM_Servo 50
+#define resPWM_Servo 16
+
+//******************************************/
+// Variables globales
+//******************************************/
 // Anti-rebote
 volatile bool flagLectura = false;
 volatile unsigned long ultimaInterrupcion = 0;
@@ -31,6 +53,36 @@ const unsigned long tiempoRebote = 250; // ms
 // Variables para ADC
 int adcTemp;
 float tempC;
+float adcRAWEMA = 0;
+float adcFiltrado = 0;
+float alpha = 0.05;
+
+// Parámetros para conversión a temperatura
+const float VREF = 3.3; // Voltaje de referencia
+const int ADC_RESOLUTION = 4095; // Resolución ADC ESP32 (12 bits)
+const float TEMP_MIN = 0.0; // Temperatura mínima esperada
+const float TEMP_MAX = 35.0; // Temperatura máxima esperada
+
+// Posiciones servo
+uint32_t posiciones[] = {
+  1638, // 0.5 ms (posicion izquierda)
+  4915, // 1.5 ms (posicion centro)
+  8192  // 2.5 ms (posicion derecha)
+};
+uint32_t pulsoServo = posiciones[1]; // Posición inicial centro
+uint32_t movServo = posiciones[1];
+uint8_t pasoServo = 50;  // microsegundos por actualización
+unsigned long ultimaActualizacionServo = 0;
+uint8_t intervaloServo = 20; // ms
+
+//******************************************/
+  // Adafruit
+//******************************************/
+/*#define IO_LOOP_DELAY 5000
+unsigned long lastUpdate = 0;
+
+// set up the 'counter' feed
+AdafruitIO_Feed *canalTemperatura = io.feed("temperatura");
 
 //******************************************/
 // ISRs Rutinas de Interrupcion
@@ -44,34 +96,145 @@ void IRAM_ATTR ISR_tomaTemp() {
 }
 
 //******************************************/
+// Otras funciones
+//******************************************/
+void initPWM() {
+  // LEDs
+  ledcSetup(pwmChannelR, freqPWM_LED, resPWM_LED);
+  ledcAttachPin(ledR, pwmChannelR);
+
+  ledcSetup(pwmChannelY, freqPWM_LED, resPWM_LED);
+  ledcAttachPin(ledY, pwmChannelY);
+
+  ledcSetup(pwmChannelG, freqPWM_LED, resPWM_LED);
+  ledcAttachPin(ledG, pwmChannelG);
+
+  // Servo
+  ledcSetup(pwmChannelServo, freqPWM_Servo, resPWM_Servo);
+  ledcAttachPin(servoPin, pwmChannelServo);
+  ledcWrite(pwmChannelServo, pulsoServo);
+}
+
+// Mover servo 
+void moverServo() {
+  if (millis() - ultimaActualizacionServo >= intervaloServo) {
+    ultimaActualizacionServo = millis();
+    if (pulsoServo < movServo) {
+      pulsoServo += pasoServo;
+      if (pulsoServo > movServo) pulsoServo = movServo;
+    } else if (pulsoServo > movServo) {
+      pulsoServo -= pasoServo;
+      if (pulsoServo < movServo) pulsoServo = movServo;
+    }
+    ledcWrite(pwmChannelServo, pulsoServo);
+  }
+}
+
+void getADCEMA (void){
+  int lecturas = 10;
+  long suma = 0;
+  for (int i = 0; i < lecturas; i++){
+    suma += analogRead(sensorTemp);
+  }
+  adcRAWEMA = suma / lecturas;
+  adcFiltrado = (alpha * adcRAWEMA) + ((1.0 - alpha) * adcFiltrado);
+}
+
+//******************************************/
 // Configuracion
 //******************************************/
 void setup() {
-  Serial.begin(115200);
-  pinMode(ledR, OUTPUT);
-  pinMode(ledY, OUTPUT);
-  pinMode(ledG, OUTPUT);
+Serial.begin(115200);
+
+  // Entradas
   pinMode(sensorTemp, INPUT);
   pinMode(but1, INPUT_PULLUP);
 
+  //Funciones
+  initPWM();
+  getADCEMA();
+
+  //Rutina de interrupcion
   attachInterrupt(digitalPinToInterrupt(but1), ISR_tomaTemp, FALLING);
-}
+
+  // Configuracion de transistores
+  pinMode(disp1, OUTPUT);
+  pinMode(disp2, OUTPUT);
+  pinMode(disp3, OUTPUT);
+
+//******************************************/
+  // Adafruit
+//******************************************/
+  /*while(! Serial);
+  Serial.print("Connecting to Adafruit IO");
+
+  // connect to io.adafruit.com
+  io.connect();
+
+  // set up a message handler for the count feed.
+  // the handleMessage function (defined below)
+  // will be called whenever a message is
+  // received from adafruit io.
+
+  // wait for a connection
+  while(io.status() < AIO_CONNECTED) {
+    Serial.print(".");
+    delay(500);
+  }
+
+  // we are connected
+  Serial.println();
+  Serial.println(io.statusText()); 
+*/}
 
 //******************************************/
 // Loop Principal
 //******************************************/
 void loop() {
-  // Lectura de temperatura
-  if (flagLectura) {
-    flagLectura = false;
+//******************************************/
+  // Adafruit
+//******************************************/
+  /* io.run(); is required for all sketches.
+  // it should always be present at the top of your loop
+  // function. it keeps the client connected to
+  // io.adafruit.com, and processes any incoming data.
+  io.run();
 
-    adcTemp = analogRead(sensorTemp);
-    float voltage = adcTemp * (3.3 / 4095.0); 
-    tempC = voltage / 0.01;                   
+  if (millis() > (lastUpdate + IO_LOOP_DELAY)) {
+    // save count to the 'counter' feed on Adafruit IO
+    Serial.print("sending -> ");
+    Serial.println(tempC);
+    canalTemperatura->save(tempC);
+    // after publishing, store the current time
+    lastUpdate = millis();
+  }*/
+getADCEMA();
+moverServo();
+// Lectura de temperatura
+if (flagLectura) {
+    flagLectura = false;     
 
-    Serial.print("ADC: ");
-    Serial.println(adcTemp);
-    Serial.print("Temperatura (°C): ");
-    Serial.println(tempC, 2);
+    Serial.print("ADC RAW: ");
+    Serial.print(adcRAWEMA);
+    Serial.print(" - ADC FILTRADO: ");
+    Serial.println(adcFiltrado);
+  
+  ledcWrite(pwmChannelR, 0);
+  ledcWrite(pwmChannelG, 0);
+  ledcWrite(pwmChannelY, 0);
+
+    // Selección de color según el rango
+  if (adcFiltrado < 22.0) {
+      ledcWrite(pwmChannelG, 255); // Verde
+      movServo = posiciones[0]; // Posicion izquierda
+    } 
+    else if (adcFiltrado >= 22.0 && adcFiltrado < 25.0) {
+      ledcWrite(pwmChannelY, 255); // Amarillo
+      movServo = posiciones[1]; // Posicion centro
+    } 
+    else {
+      ledcWrite(pwmChannelR, 255); // Rojo
+      movServo = posiciones[2]; // Posicion derecha
+    }
   }
 }
