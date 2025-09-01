@@ -57,7 +57,7 @@ int adcTemp;
 float tempC;
 float adcRAWEMA = 0;
 float adcFiltrado = 0;
-float alpha = 0.01;
+float alpha = 0.01;   // Constante para suavizado para filtro EMA
 
 // Posiciones servo
 uint32_t posiciones[] = {
@@ -112,22 +112,7 @@ void initPWM() {
   // Servo
   ledcSetup(pwmChannelServo, freqPWM_Servo, resPWM_Servo);
   ledcAttachPin(servoPin, pwmChannelServo);
-  ledcWrite(pwmChannelServo, pulsoServo);
-}
-
-// Mover servo 
-void moverServo() {
-  if (millis() - ultimaActualizacionServo >= intervaloServo) {
-    ultimaActualizacionServo = millis();
-    if (pulsoServo < movServo) {
-      pulsoServo += pasoServo;
-      if (pulsoServo > movServo) pulsoServo = movServo;
-    } else if (pulsoServo > movServo) {
-      pulsoServo -= pasoServo;
-      if (pulsoServo < movServo) pulsoServo = movServo;
-    }
-    ledcWrite(pwmChannelServo, pulsoServo);
-  }
+  ledcWrite(pwmChannelServo, posiciones[1]); // Se pone en una posicion inicial al servo
 }
 
 //Funcion para filtrar la senal recibida por el sensor de temperatura
@@ -235,7 +220,6 @@ Serial.begin(115200);
 void loop() {
 io.run();  
 getADCEMA();
-moverServo();
 
 // Lectura de temperatura
 if (flagLectura) {
@@ -257,15 +241,15 @@ if (flagLectura) {
   // Selección de color según el rango
   if (tempF < 22.0) {
       ledcWrite(pwmChannelG, 255); // Verde
-      movServo = posiciones[0]; // Posicion izquierda
+      ledcWrite(pwmChannelServo, posiciones[0]); // Posicion izquierda
     } 
     else if (tempF >= 22.0 && tempF < 25.0) {
       ledcWrite(pwmChannelY, 255); // Amarillo
-      movServo = posiciones[1]; // Posicion centro
+      ledcWrite(pwmChannelServo, posiciones[1]); // Posicion centro
     } 
     else {
       ledcWrite(pwmChannelR, 255); // Rojo
-      movServo = posiciones[2]; // Posicion derecha
+      ledcWrite(pwmChannelServo, posiciones[2]);; // Posicion derecha
     }
     //Se muestra el valor de la temperatura en los displays
     mostrarTemp(tempF);
